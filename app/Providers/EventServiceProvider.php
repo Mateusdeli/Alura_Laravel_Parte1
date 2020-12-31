@@ -2,10 +2,16 @@
 
 namespace App\Providers;
 
+use App\Events\EnviarEmailNovaSerie;
+use App\Events\RemoverSerieEvent;
+use App\Listeners\EnviarEmailNovaSerieListener;
+use App\Listeners\LogSerieCriadaListener;
+use App\Listeners\RemoveCapaSerie;
+use App\Listeners\RemoverSerieListener;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Listeners\SendEmailVerificationNotification;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Event;
 
 class EventServiceProvider extends ServiceProvider
 {
@@ -18,6 +24,10 @@ class EventServiceProvider extends ServiceProvider
         Registered::class => [
             SendEmailVerificationNotification::class,
         ],
+        EnviarEmailNovaSerie::class => [
+            EnviarEmailNovaSerieListener::class,
+            LogSerieCriadaListener::class
+        ]
     ];
 
     /**
@@ -27,6 +37,8 @@ class EventServiceProvider extends ServiceProvider
      */
     public function boot()
     {
+        parent::boot();
+
         //
     }
 }

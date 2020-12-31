@@ -2,46 +2,82 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\AddSerieRequest;
-use App\Models\Series;
+use App\Episodio;
+use App\Events\EnviarEmailNovaSerie;
+use App\Http\Requests\SeriesFormRequest;
+use App\Jobs\RemoverCapaSerie;
+use App\Serie;
+use App\Services\CriadorDeSerie;
+use App\Services\CriandorEmailSerie;
+use App\Services\RemovedorDeSerie;
+use App\Temporada;
+use App\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 
 class SeriesController extends Controller
 {
-    public function index(Request $request)
-    {
-        $series = Series::query()->orderBy('nome')->get();
-        $mensagem = $request->session()->get('mensagem');
-        return view("series.index", ["series" => $series, "mensagem" => $mensagem]);
-    }
 
-    public function show(string $name) {
-        $series = Series::where('nome', $name)->get();
-        return view("series.index", ["series" => $series]);
+    public function index(Request $request) {
+        $series = Serie::query()
+            ->orderBy('nome')
+            ->get();
+        $mensagem = $request->session()->get('mensagem');
+
+        return view('series.index', compact('series', 'mensagem'));
     }
 
     public function create()
     {
-        return view("series.create");
+        return view('series.create');
     }
 
-    public function store(AddSerieRequest $request)
-    {
+    public function store(
+        SeriesFormRequest $request,
+        CriadorDeSerie $criadorDeSerie
+    ) {
 
-        var_dump($request->validated());
+        $capa = null;
+        if ($request->hasFile('capa')) {
+            $capa = $request->file('capa')->store('series');
+        }
 
-        $nome = filter_var($request->nome, FILTER_SANITIZE_STRING);
-        $serie = Series::create([
-            "nome" => $nome
-        ]);
-        $request->session()->flash('mensagem', "A série com o id: {$serie->id}, de nome {$serie->nome} foi adicionada com sucesso!");
-        return redirect()->route("series.index");
+        $serie = $criadorDeSerie->criarSerie(
+            $request->nome,
+            $request->qtd_temporadas,
+            $request->ep_por_temporada,
+            $capa
+        );
+
+        Event::dispatch(new EnviarEmailNovaSerie($request->nome, $request->qtd_temporadas, $request->ep_por_temporada, $serie->capa_url));
+        
+        $request->session()
+            ->flash(
+                'mensagem',
+                "Série {$serie->id} e suas temporadas e episódios criados com sucesso {$serie->nome}"
+            );
+
+        return redirect()->route('listar_series');
     }
 
-    public function destroy(Request $request)
+    public function destroy(Request $request, RemovedorDeSerie $removedorDeSerie)
     {
-       Series::destroy($request->id);
-       $request->session()->flash('mensagem', "A série foi removida com sucesso!");
-       return redirect()->route("series.index");
+        $nomeSerie = $removedorDeSerie->removerSerie($request->id);
+        $request->session()
+            ->flash(
+                'mensagem',
+                "Série $nomeSerie removida com sucesso"
+            );
+        return redirect()->route('listar_series');
+    }
+
+    public function editaNome(int $id, Request $request)
+    {
+        $serie = Serie::find($id);
+        $novoNome = $request->nome;
+        $serie->nome = $novoNome;
+        $serie->save();
     }
 }
